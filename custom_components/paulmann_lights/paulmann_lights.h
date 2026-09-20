@@ -24,12 +24,16 @@ class PaulmannLights;
 class PaulmannLightOutput : public light::LightOutput {
  public:
   void set_parent(PaulmannLights *parent) { this->parent_ = parent; }
+  void setup_state(light::LightState *state) override;
+  void apply_remote_state(bool on, uint8_t brightness, uint16_t color_mireds);
 
   light::LightTraits get_traits() override;
   void write_state(light::LightState *state) override;
 
  protected:
   PaulmannLights *parent_{nullptr};
+  light::LightState *light_state_{nullptr};
+  bool suppress_write_{false};
 };
 
 class PaulmannControlNumber : public number::Number {
@@ -71,6 +75,7 @@ class PaulmannLights : public ble_client::BLEClient {
   void write_color_temperature(uint16_t color_mireds);
   void write_control(ControlType control_type, uint8_t value);
   void sync_system_time();
+  void set_light_output(PaulmannLightOutput *light_output) { this->light_output_ = light_output; }
   void set_timer_number(PaulmannControlNumber *number) { this->timer_number_ = number; }
   void set_working_mode_number(PaulmannControlNumber *number) { this->working_mode_number_ = number; }
   void set_controller_enable_number(PaulmannControlNumber *number) { this->controller_enable_number_ = number; }
@@ -98,6 +103,7 @@ class PaulmannLights : public ble_client::BLEClient {
   } handles_;
 
   bool authenticated_{false};
+  bool auth_write_pending_{false};
   bool read_in_progress_{false};
   uint8_t connection_attempts_{0};
   uint32_t last_connect_attempt_ms_{0};
@@ -126,6 +132,7 @@ class PaulmannLights : public ble_client::BLEClient {
   PaulmannControlNumber *timer_number_{nullptr};
   PaulmannControlNumber *working_mode_number_{nullptr};
   PaulmannControlNumber *controller_enable_number_{nullptr};
+  PaulmannLightOutput *light_output_{nullptr};
 
   bool write_bytes_(uint16_t handle, const uint8_t *data, uint16_t len);
   bool read_handle_(uint16_t handle);
@@ -136,6 +143,7 @@ class PaulmannLights : public ble_client::BLEClient {
   void begin_poll_reads_();
   void advance_read_queue_();
   void process_read_value_(uint16_t handle, const uint8_t *value, uint16_t value_len);
+  void publish_light_state_();
   static std::string bytes_to_string_(const uint8_t *value, uint16_t value_len);
   static std::string bytes_to_hex_(const uint8_t *value, uint16_t value_len);
 };

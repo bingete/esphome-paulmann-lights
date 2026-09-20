@@ -41,6 +41,32 @@ void PaulmannLights::setup() {
   this->set_interval("poll", this->update_interval_ms_, [this]() { this->poll_state_(); });
 }
 
+void PaulmannLights::publish_light_state_() {
+  if (this->light_output_ != nullptr) {
+    this->light_output_->apply_remote_state(this->on_, this->brightness_, this->color_mireds_);
+  }
+}
+
+void PaulmannLightOutput::setup_state(light::LightState *state) {
+  light::LightOutput::setup_state(state);
+  this->light_state_ = state;
+}
+
+void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, uint16_t color_mireds) {
+  if (this->light_state_ == nullptr) {
+    return;
+  }
+
+  this->suppress_write_ = true;
+  auto call = this->light_state_->make_call();
+  call.set_state(on);
+  call.set_brightness(static_cast<float>(brightness) / 100.0f);
+  call.set_color_temperature(static_cast<float>(color_mireds));
+  call.set_save(false);
+  call.perform();
+  this->suppress_write_ = false;
+}
+
 void PaulmannLights::dump_config() {
   ESP_LOGCONFIG(TAG, "Paulmann Lights (%s)", this->name_.c_str());
   ble_client::BLEClient::dump_config();
@@ -67,6 +93,7 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
     case ESP_GATTC_CLOSE_EVT: {
       ESP_LOGW(TAG, "[%s] BLE disconnected", this->address_str());
       this->authenticated_ = false;
+      this->auth_write_pending_ = false;
       this->read_in_progress_ = false;
       this->pending_reads_.clear();
       this->current_read_handle_ = 0;
@@ -76,9 +103,20 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
     case ESP_GATTC_SEARCH_CMPL_EVT: {
       this->discover_handles_();
       this->authenticate_();
-      if (this->authenticated_) {
-        this->sync_system_time();
-        this->poll_state_();
+      this->poll_state_();
+      break;
+    }
+    case ESP_GATTC_WRITE_CHAR_EVT: {
+      if (param->write.handle == this->handles_.password) {
+        this->auth_write_pending_ = false;
+        this->authenticated_ = param->write.status == ESP_GATT_OK;
+        if (this->authenticated_) {
+          ESP_LOGI(TAG, "[%s] Authentication successful", this->address_str());
+          this->sync_system_time();
+          this->poll_state_();
+        } else {
+          ESP_LOGW(TAG, "[%s] Authentication failed (status=%d)", this->address_str(), param->write.status);
+        }
       }
       break;
     }
@@ -269,8 +307,8 @@ void PaulmannLights::authenticate_() {
 
   if (this->write_bytes_(this->handles_.password, reinterpret_cast<const uint8_t *>(this->password_.data()),
                          this->password_.size())) {
-    this->authenticated_ = true;
-    ESP_LOGI(TAG, "[%s] Authentication command sent", this->address_str());
+    this->auth_write_pending_ = true;
+    ESP_LOGI(TAG, "[%s] Authentication command sent, waiting for response", this->address_str());
   }
 }
 
@@ -287,11 +325,13 @@ void PaulmannLights::poll_state_() {
     return;
   }
 
+  if (this->auth_write_pending_) {
+    return;
+  }
+
   if (!this->authenticated_) {
     this->authenticate_();
-    if (!this->authenticated_) {
-      return;
-    }
+    return;
   }
 
   const uint32_t now = millis();
@@ -373,16 +413,19 @@ void PaulmannLights::advance_read_queue_() {
 void PaulmannLights::process_read_value_(uint16_t handle, const uint8_t *value, uint16_t value_len) {
   if (handle == this->handles_.onoff && value_len > 0) {
     this->on_ = value[0] == 1;
+    this->publish_light_state_();
     return;
   }
 
   if (handle == this->handles_.brightness && value_len > 0) {
     this->brightness_ = std::min<uint8_t>(100, value[0]);
+    this->publish_light_state_();
     return;
   }
 
   if (handle == this->handles_.color && value_len >= 2) {
     this->color_mireds_ = static_cast<uint16_t>(value[0] | (value[1] << 8));
+    this->publish_light_state_();
     return;
   }
   if (handle == this->handles_.timer && value_len > 0) {
@@ -464,6 +507,9 @@ light::LightTraits PaulmannLightOutput::get_traits() {
 
 void PaulmannLightOutput::write_state(light::LightState *state) {
   if (this->parent_ == nullptr) {
+    return;
+  }
+  if (this->suppress_write_) {
     return;
   }
 

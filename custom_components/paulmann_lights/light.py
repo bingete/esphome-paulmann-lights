@@ -8,7 +8,7 @@ from .const import CONF_PAULMANN_LIGHTS_ID
 
 PaulmannLightOutput = paulmann_lights_ns.class_("PaulmannLightOutput", light.LightOutput)
 
-CONFIG_SCHEMA = light.RGB_LIGHT_SCHEMA.extend(
+CONFIG_SCHEMA = light.BRIGHTNESS_ONLY_LIGHT_SCHEMA.extend(
     {
         cv.GenerateID(CONF_OUTPUT_ID): cv.declare_id(PaulmannLightOutput),
         cv.GenerateID(CONF_PAULMANN_LIGHTS_ID): cv.use_id(PaulmannLights),
@@ -21,3 +21,4 @@ async def to_code(config):
     await light.register_light(var, config)
     parent = await cg.get_variable(config[CONF_PAULMANN_LIGHTS_ID])
     cg.add(var.set_parent(parent))
+    cg.add(parent.set_light_output(var))
