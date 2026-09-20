@@ -15,7 +15,7 @@ ESPHome custom component for controlling Paulmann Bluetooth LED lights with ESP3
 - `custom_components/paulmann_lights/__init__.py`
 - `custom_components/paulmann_lights/light.py`
 - `custom_components/paulmann_lights/number.py`
-- `custom_components/paulmann_lights/sensor.py`
+- `custom_components/paulmann_lights/text_sensor.py`
 - `custom_components/paulmann_lights/const.py`
 - `custom_components/paulmann_lights/paulmann_lights.h`
 - `custom_components/paulmann_lights/paulmann_lights.cpp`

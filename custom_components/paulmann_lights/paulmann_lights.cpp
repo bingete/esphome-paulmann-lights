@@ -103,7 +103,6 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
     case ESP_GATTC_SEARCH_CMPL_EVT: {
       this->discover_handles_();
       this->authenticate_();
-      this->poll_state_();
       break;
     }
     case ESP_GATTC_WRITE_CHAR_EVT: {
