@@ -7,6 +7,7 @@
 #ifdef USE_ESP32
 
 #include <algorithm>
+#include <cinttypes>
 #include <cmath>
 #include <ctime>
 
@@ -72,7 +73,7 @@ void PaulmannLights::dump_config() {
   esp32_ble_client::BLEClientBase::dump_config();
   ESP_LOGCONFIG(TAG, "  Password configured: %s", YESNO(!this->password_.empty()));
   ESP_LOGCONFIG(TAG, "  Connection retries: %u", this->connection_retries_);
-  ESP_LOGCONFIG(TAG, "  Poll interval: %u ms", this->update_interval_ms_);
+  ESP_LOGCONFIG(TAG, "  Poll interval: %" PRIu32 " ms", this->update_interval_ms_);
 }
 
 bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
