@@ -37,7 +37,7 @@ static const uint16_t UUID_INFO_IEEE_CERT = 0x2A2A;
 static const uint16_t UUID_INFO_PNP_ID = 0x2A50;
 
 void PaulmannLights::setup() {
-  ble_client::BLEClient::setup();
+  esp32_ble_client::BLEClientBase::setup();
   this->set_interval("poll", this->update_interval_ms_, [this]() { this->poll_state_(); });
 }
 
@@ -69,7 +69,7 @@ void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, uint16
 
 void PaulmannLights::dump_config() {
   ESP_LOGCONFIG(TAG, "Paulmann Lights (%s)", this->name_.c_str());
-  ble_client::BLEClient::dump_config();
+  esp32_ble_client::BLEClientBase::dump_config();
   ESP_LOGCONFIG(TAG, "  Password configured: %s", YESNO(!this->password_.empty()));
   ESP_LOGCONFIG(TAG, "  Connection retries: %u", this->connection_retries_);
   ESP_LOGCONFIG(TAG, "  Poll interval: %u ms", this->update_interval_ms_);
@@ -77,7 +77,7 @@ void PaulmannLights::dump_config() {
 
 bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                                          esp_ble_gattc_cb_param_t *param) {
-  if (!ble_client::BLEClient::gattc_event_handler(event, gattc_if, param)) {
+  if (!esp32_ble_client::BLEClientBase::gattc_event_handler(event, gattc_if, param)) {
     return false;
   }
 

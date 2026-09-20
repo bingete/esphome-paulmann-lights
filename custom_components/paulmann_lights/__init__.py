@@ -1,5 +1,5 @@
 import esphome.codegen as cg
-from esphome.components import ble_client, esp32_ble, esp32_ble_tracker
+from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker
 from esphome.components.esp32_ble import BTLoggers
 import esphome.config_validation as cv
 
@@ -16,13 +16,13 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
 )
 
-AUTO_LOAD = ["light", "number", "text_sensor"]
+AUTO_LOAD = ["esp32_ble_client", "light", "number", "text_sensor"]
 CODEOWNERS = ["@bingete"]
-DEPENDENCIES = ["ble_client", "esp32_ble_tracker"]
+DEPENDENCIES = ["esp32_ble_tracker"]
 MULTI_CONF = True
 
 paulmann_lights_ns = cg.esphome_ns.namespace("paulmann_lights")
-PaulmannLights = paulmann_lights_ns.class_("PaulmannLights", ble_client.BLEClient)
+PaulmannLights = paulmann_lights_ns.class_("PaulmannLights", esp32_ble_client.BLEClientBase)
 
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
