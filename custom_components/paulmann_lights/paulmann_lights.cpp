@@ -86,6 +86,10 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       if (param->open.status == ESP_GATT_OK) {
         ESP_LOGI(TAG, "[%s] BLE connected", this->address_str());
         this->connection_attempts_ = 0;
+      } else {
+        this->connection_attempts_ = std::min<uint8_t>(this->connection_retries_, this->connection_attempts_ + 1);
+        ESP_LOGW(TAG, "[%s] BLE open failed (status=%d), attempt %u/%u", this->address_str(), param->open.status,
+                 this->connection_attempts_, this->connection_retries_);
       }
       break;
     }
@@ -491,9 +495,15 @@ std::string PaulmannLights::bytes_to_string_(const uint8_t *value, uint16_t valu
 }
 
 std::string PaulmannLights::bytes_to_hex_(const uint8_t *value, uint16_t value_len) {
-  char buffer[format_hex_size(64)];
-  const auto copy_len = std::min<uint16_t>(value_len, 64);
-  return std::string(format_hex_pretty_to(buffer, value, copy_len, ':'));
+  std::string output;
+  output.reserve(value_len * 3);
+  for (uint16_t i = 0; i < value_len; i++) {
+    if (i > 0) {
+      output.push_back(':');
+    }
+    output += format_hex(value[i]);
+  }
+  return output;
 }
 
 light::LightTraits PaulmannLightOutput::get_traits() {

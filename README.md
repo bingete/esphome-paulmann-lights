@@ -24,5 +24,13 @@ ESPHome custom component for controlling Paulmann Bluetooth LED lights with ESP3
 ## Usage
 
 Use `example-esp32s3.yaml` as a starting point. Replace the BLE MAC address and Wi-Fi secrets.
+Make sure the repository is used as a local external component source:
+
+```yaml
+external_components:
+  - source:
+      type: local
+      path: ./custom_components
+```
 
 The component targets ESP32-S3 (DevKitC-1 compatible) and requires `esp32_ble_tracker`.
