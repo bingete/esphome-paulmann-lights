@@ -18,7 +18,7 @@ from .const import (
 
 AUTO_LOAD = ["light", "number", "text_sensor"]
 CODEOWNERS = ["@bingete"]
-DEPENDENCIES = ["esp32_ble_tracker"]
+DEPENDENCIES = ["ble_client", "esp32_ble_tracker"]
 MULTI_CONF = True
 
 paulmann_lights_ns = cg.esphome_ns.namespace("paulmann_lights")
