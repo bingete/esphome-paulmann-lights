@@ -19,6 +19,9 @@ wifi:
 
 esp32_ble_tracker:
 
+ble_client:
+  []
+
 external_components:
   - source:
       type: local
