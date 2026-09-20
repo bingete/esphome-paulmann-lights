@@ -33,6 +33,5 @@ external_components:
       path: ./custom_components
 ```
 
-The component targets ESP32-S3 (DevKitC-1 compatible) and requires `esp32_ble_tracker`. It also
-requires the `ble_client` component to be present in your configuration (an empty `ble_client: []`
-is sufficient) so its sources are compiled in.
+The component targets ESP32-S3 (DevKitC-1 compatible) and requires `esp32_ble_tracker`. It
+manages its own BLE client internally, so no separate `ble_client` configuration is required.

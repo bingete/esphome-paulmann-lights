@@ -1,6 +1,6 @@
 #pragma once
 
-#include "esphome/components/ble_client/ble_client.h"
+#include "esphome/components/esp32_ble_client/ble_client_base.h"
 #include "esphome/components/light/light_output.h"
 #include "esphome/components/number/number.h"
 #include "esphome/components/text_sensor/text_sensor.h"
@@ -48,7 +48,7 @@ class PaulmannControlNumber : public number::Number {
   ControlType control_type_{CONTROL_TYPE_TIMER};
 };
 
-class PaulmannLights : public ble_client::BLEClient {
+class PaulmannLights : public esp32_ble_client::BLEClientBase {
  public:
   void setup() override;
   void dump_config() override;
