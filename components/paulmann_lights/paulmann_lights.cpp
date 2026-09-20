@@ -165,9 +165,11 @@ void PaulmannLights::write_brightness(uint8_t brightness) {
 
 void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
   this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
+  // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
+  const auto kelvin = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(this->color_mireds_)));
   const uint8_t payload[2] = {
-      static_cast<uint8_t>(this->color_mireds_ & 0xFF),
-      static_cast<uint8_t>((this->color_mireds_ >> 8) & 0xFF),
+      static_cast<uint8_t>(kelvin & 0xFF),
+      static_cast<uint8_t>((kelvin >> 8) & 0xFF),
   };
   if (!this->write_bytes_(this->handles_.color, payload, sizeof(payload))) {
     ESP_LOGW(TAG, "[%s] Failed to write color temperature", this->address_str());
@@ -428,7 +430,12 @@ void PaulmannLights::process_read_value_(uint16_t handle, const uint8_t *value, 
   }
 
   if (handle == this->handles_.color && value_len >= 2) {
-    this->color_mireds_ = static_cast<uint16_t>(value[0] | (value[1] << 8));
+    // The device reports its color temperature in Kelvin, not mireds.
+    const auto kelvin = static_cast<uint16_t>(value[0] | (value[1] << 8));
+    if (kelvin > 0) {
+      const auto mireds = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(kelvin)));
+      this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, mireds));
+    }
     this->publish_light_state_();
     return;
   }
