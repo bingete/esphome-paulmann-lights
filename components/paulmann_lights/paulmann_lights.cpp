@@ -63,6 +63,7 @@ void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, uint16
   call.set_state(on);
   call.set_brightness(static_cast<float>(brightness) / 100.0f);
   call.set_color_temperature(static_cast<float>(color_mireds));
+  call.set_transition_length(0);
   call.set_save(false);
   call.perform();
   this->suppress_write_ = false;
