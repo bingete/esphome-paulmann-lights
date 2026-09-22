@@ -50,6 +50,9 @@ static const float EXPOSED_MIN_COLOR_MIREDS = 151.0f;
 static const float EXPOSED_MAX_COLOR_MIREDS = 372.0f;
 static const uint16_t MIN_PLAUSIBLE_COLOR_KELVIN = 1500;
 static const uint16_t MAX_PLAUSIBLE_COLOR_KELVIN = 9000;
+// A polled color value within this many mireds of the pending target counts as confirmation
+// that the lamp accepted the last color-temperature write.
+static const float COLOR_CONFIRM_MIREDS_TOLERANCE = 2.0f;
 
 void PaulmannLights::setup() {
   esp32_ble_client::BLEClientBase::setup();
@@ -120,7 +123,6 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       this->working_mode_ = 0xFF;
       this->color_byte_order_ = COLOR_BYTE_ORDER_UNKNOWN;
       this->pending_color_temperature_write_ = false;
-      this->waiting_for_color_temperature_mode_ack_ = false;
       this->pending_working_mode_write_ = false;
       this->read_in_progress_ = false;
       this->pending_reads_.clear();
@@ -145,8 +147,6 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
           ESP_LOGW(TAG, "[%s] Authentication failed (status=%d)", this->address_str(), param->write.status);
         }
       } else if (param->write.handle == this->handles_.working_mode) {
-        const bool handle_color_temperature_mode_ack = this->waiting_for_color_temperature_mode_ack_;
-        this->waiting_for_color_temperature_mode_ack_ = false;
         if (param->write.status != ESP_GATT_OK) {
           ESP_LOGW(TAG, "[%s] Working mode write failed (status=%d)", this->address_str(), param->write.status);
           this->pending_working_mode_write_ = false;
@@ -158,10 +158,10 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
             this->working_mode_ = this->pending_working_mode_value_;
             this->pending_working_mode_write_ = false;
           }
-          if ((handle_color_temperature_mode_ack || this->pending_color_temperature_write_) &&
-              this->working_mode_ == WORKING_MODE_COLOR_TEMPERATURE) {
-            this->pending_color_temperature_write_ =
-                !this->write_color_temperature_payload_(this->pending_color_mireds_);
+          // A pending color write stays pending until a poll confirms the lamp reports the
+          // target temperature, so this only triggers the next attempt, not completion.
+          if (this->pending_color_temperature_write_ && this->working_mode_ == WORKING_MODE_COLOR_TEMPERATURE) {
+            this->write_color_temperature_payload_(this->pending_color_mireds_);
           }
         }
       }
@@ -213,9 +213,11 @@ float PaulmannLights::clamp_color_mireds_(float color_mireds) {
 void PaulmannLights::write_color_temperature(float color_mireds) {
   this->pending_color_mireds_ = clamp_color_mireds_(color_mireds);
   this->color_mireds_ = this->pending_color_mireds_;
-  this->waiting_for_color_temperature_mode_ack_ = false;
   this->pending_working_mode_write_ = false;
-  this->pending_color_temperature_write_ = !this->write_color_temperature_payload_(this->pending_color_mireds_);
+  // Keep the write pending until a poll confirms the lamp reports the target temperature,
+  // so a payload the lamp silently ignores is re-applied automatically instead of being lost.
+  this->pending_color_temperature_write_ = true;
+  this->write_color_temperature_payload_(this->pending_color_mireds_);
 }
 
 void PaulmannLights::ensure_color_temperature_mode_() {
@@ -237,14 +239,18 @@ void PaulmannLights::ensure_color_temperature_mode_() {
 }
 
 bool PaulmannLights::write_color_temperature_payload_(float color_mireds) {
-  if (this->handles_.working_mode != 0 && this->working_mode_ != WORKING_MODE_COLOR_TEMPERATURE) {
-    // Force the lamp into color-temperature mode first. If we had to switch modes, keep the
-    // color write pending so it is retried on the next poll/write slot, after the mode write
-    // has reached the lamp; writing the color characteristic in the same BLE transaction as
-    // the mode switch is silently ignored by the firmware.
+  if (this->handles_.working_mode != 0 && this->working_mode_ != 0xFF &&
+      this->working_mode_ != WORKING_MODE_COLOR_TEMPERATURE) {
+    // The lamp is known to be in a non-color-temperature working mode, where writes to the
+    // color characteristic are silently ignored. Switch it back to color-temperature mode;
+    // the pending payload is flushed once the mode write is acked.
     this->ensure_color_temperature_mode_();
     return false;
   }
+  // Otherwise write the payload straight away. Color-temperature is the lamp's normal working
+  // mode, and gating the write behind a confirmed mode read silently dropped user changes when
+  // the mode was not yet known (e.g. right after connect). If the lamp does ignore the write,
+  // the next poll observes the mismatch and re-applies it (forcing CT mode first if needed).
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
   this->color_mireds_ = clamp_color_mireds_(color_mireds);
   const auto kelvin = static_cast<uint16_t>(
@@ -293,7 +299,6 @@ void PaulmannLights::write_control(ControlType control_type, uint8_t value) {
   if (!this->write_bytes_(handle, &value, 1)) {
     ESP_LOGW(TAG, "[%s] Failed to write control value type=%u", this->address_str(), control_type);
   } else if (control_type == CONTROL_TYPE_WORKING_MODE) {
-    this->waiting_for_color_temperature_mode_ack_ = false;
     if (value != WORKING_MODE_COLOR_TEMPERATURE) {
       this->pending_color_temperature_write_ = false;
     }
@@ -451,16 +456,9 @@ void PaulmannLights::poll_state_() {
   }
 
   this->last_poll_ms_ = now;
-  if (this->pending_color_temperature_write_ && !this->waiting_for_color_temperature_mode_ack_) {
-    if (this->working_mode_ == WORKING_MODE_COLOR_TEMPERATURE) {
-      this->pending_color_temperature_write_ =
-          !this->write_color_temperature_payload_(this->pending_color_mireds_);
-    } else {
-      this->write_color_temperature(this->pending_color_mireds_);
-    }
-    if (!this->pending_color_temperature_write_ || this->waiting_for_color_temperature_mode_ack_) {
-      return;
-    }
+  if (this->pending_color_temperature_write_ && this->working_mode_ == WORKING_MODE_COLOR_TEMPERATURE) {
+    // Retry the color payload; the poll below then confirms whether the lamp accepted it.
+    this->write_color_temperature_payload_(this->pending_color_mireds_);
   }
   this->begin_poll_reads_();
 }
@@ -553,7 +551,18 @@ void PaulmannLights::process_read_value_(uint16_t handle, const uint8_t *value, 
     const auto kelvin = this->color_byte_order_ == COLOR_BYTE_ORDER_BIG_ENDIAN ? big_endian_kelvin : little_endian_kelvin;
     if (kelvin > 0) {
       const auto clamped_kelvin = std::max<uint16_t>(MIN_COLOR_KELVIN, std::min<uint16_t>(MAX_COLOR_KELVIN, kelvin));
-      this->color_mireds_ = clamp_color_mireds_(1000000.0f / static_cast<float>(clamped_kelvin));
+      const auto read_mireds = clamp_color_mireds_(1000000.0f / static_cast<float>(clamped_kelvin));
+      if (this->pending_color_temperature_write_) {
+        if (std::fabs(read_mireds - this->pending_color_mireds_) <= COLOR_CONFIRM_MIREDS_TOLERANCE) {
+          // The lamp confirmed the last color-temperature change.
+          this->pending_color_temperature_write_ = false;
+        } else if (this->working_mode_ != 0xFF && this->working_mode_ != WORKING_MODE_COLOR_TEMPERATURE) {
+          // The lamp ignored the write because it sits in a non-color-temperature working
+          // mode; force it back so the next retry (next poll) actually lands.
+          this->ensure_color_temperature_mode_();
+        }
+      }
+      this->color_mireds_ = read_mireds;
     }
     this->publish_light_state_();
     return;
