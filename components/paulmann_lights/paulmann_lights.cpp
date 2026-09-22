@@ -26,6 +26,7 @@ static const uint16_t UUID_BRIGHTNESS = 0xFFB8;
 static const uint16_t UUID_WORKING_MODE = 0xFFB9;
 static const uint16_t UUID_PWD = 0xFFBA;
 static const uint16_t UUID_CONTROLLER_ENABLE = 0xFFBB;
+static const uint8_t WORKING_MODE_COLOR_TEMPERATURE = 0x00;
 
 static const uint16_t UUID_INFO_SYSTEM_ID = 0x2A23;
 static const uint16_t UUID_INFO_MODEL = 0x2A24;
@@ -166,6 +167,16 @@ void PaulmannLights::write_brightness(uint8_t brightness) {
 
 void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
   this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
+
+  if (this->handles_.working_mode != 0 && this->working_mode_ != WORKING_MODE_COLOR_TEMPERATURE) {
+    const uint8_t mode = WORKING_MODE_COLOR_TEMPERATURE;
+    if (!this->write_bytes_(this->handles_.working_mode, &mode, 1)) {
+      ESP_LOGW(TAG, "[%s] Failed to switch to color temperature mode", this->address_str());
+    } else {
+      this->working_mode_ = mode;
+    }
+  }
+
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
   const auto kelvin = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(this->color_mireds_)));
   const uint8_t payload[2] = {
@@ -195,6 +206,8 @@ void PaulmannLights::write_control(ControlType control_type, uint8_t value) {
 
   if (!this->write_bytes_(handle, &value, 1)) {
     ESP_LOGW(TAG, "[%s] Failed to write control value type=%u", this->address_str(), control_type);
+  } else if (control_type == CONTROL_TYPE_WORKING_MODE) {
+    this->working_mode_ = value;
   }
 }
 
@@ -447,6 +460,7 @@ void PaulmannLights::process_read_value_(uint16_t handle, const uint8_t *value, 
     return;
   }
   if (handle == this->handles_.working_mode && value_len > 0) {
+    this->working_mode_ = value[0];
     if (this->working_mode_number_ != nullptr) {
       this->working_mode_number_->publish_state(value[0]);
     }
