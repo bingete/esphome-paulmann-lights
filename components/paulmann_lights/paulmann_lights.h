@@ -33,7 +33,6 @@ class PaulmannLightOutput : public light::LightOutput {
  protected:
   PaulmannLights *parent_{nullptr};
   light::LightState *light_state_{nullptr};
-  bool suppress_write_{false};
 };
 
 class PaulmannControlNumber : public number::Number {

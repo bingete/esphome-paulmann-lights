@@ -78,15 +78,17 @@ void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, float 
     return;
   }
 
-  this->suppress_write_ = true;
-  auto call = this->light_state_->make_call();
-  call.set_state(on);
-  call.set_brightness(static_cast<float>(brightness) / 100.0f);
-  call.set_color_temperature(static_cast<float>(color_mireds));
-  call.set_transition_length(0);
-  call.set_save(false);
-  call.perform();
-  this->suppress_write_ = false;
+  // Mirror the polled device state into remote_values directly instead of going through
+  // make_call().perform(). A LightCall with transition_length(0) ends in set_immediately_(),
+  // which defers write_state() to the next loop() iteration -- after suppress_write_ has
+  // already been cleared. That phantom write pushed the lamp's old values right back,
+  // clobbering the user's pending color-temperature target so the change never landed.
+  auto &values = this->light_state_->remote_values;
+  values.set_color_mode(light::ColorMode::COLOR_TEMPERATURE);
+  values.set_state(on);
+  values.set_brightness(static_cast<float>(brightness) / 100.0f);
+  values.set_color_temperature(color_mireds);
+  this->light_state_->publish_state();
 }
 
 void PaulmannLights::dump_config() {
@@ -653,9 +655,6 @@ light::LightTraits PaulmannLightOutput::get_traits() {
 
 void PaulmannLightOutput::write_state(light::LightState *state) {
   if (this->parent_ == nullptr) {
-    return;
-  }
-  if (this->suppress_write_) {
     return;
   }
 
