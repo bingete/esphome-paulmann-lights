@@ -153,7 +153,6 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   void publish_light_state_();
   static float clamp_color_mireds_(float color_mireds);
   bool write_color_temperature_payload_(float color_mireds);
-  void ensure_color_temperature_mode_();
   void detect_color_byte_order_(uint16_t little_endian_kelvin, uint16_t big_endian_kelvin);
   static std::string bytes_to_string_(const uint8_t *value, uint16_t value_len);
   static std::string bytes_to_hex_(const uint8_t *value, uint16_t value_len);
