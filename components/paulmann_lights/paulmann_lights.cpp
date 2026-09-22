@@ -187,26 +187,10 @@ void PaulmannLights::write_brightness(uint8_t brightness) {
 }
 
 void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
-  this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
-
-  if (this->handles_.working_mode != 0) {
-    this->pending_color_temperature_write_ = true;
-    this->pending_color_mireds_ = this->color_mireds_;
-    this->waiting_for_color_temperature_mode_ack_ = true;
-    this->pending_working_mode_write_ = true;
-    this->pending_working_mode_value_ = WORKING_MODE_COLOR_TEMPERATURE;
-    const uint8_t mode = WORKING_MODE_COLOR_TEMPERATURE;
-    if (!this->write_bytes_(this->handles_.working_mode, &mode, 1)) {
-      ESP_LOGW(TAG, "[%s] Failed to switch to color temperature mode", this->address_str());
-      this->pending_color_temperature_write_ = false;
-      this->waiting_for_color_temperature_mode_ack_ = false;
-      this->pending_working_mode_write_ = false;
-    }
-    return;
-  }
-
-  this->pending_color_mireds_ = this->color_mireds_;
+  this->pending_color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
+  this->color_mireds_ = this->pending_color_mireds_;
   this->waiting_for_color_temperature_mode_ack_ = false;
+  this->pending_working_mode_write_ = false;
   this->pending_color_temperature_write_ = !this->write_color_temperature_payload_(this->pending_color_mireds_);
 }
 
