@@ -41,8 +41,13 @@ static const uint16_t MIN_COLOR_KELVIN = 2700;
 static const uint16_t MAX_COLOR_KELVIN = 6500;
 static const float MIN_COLOR_MIREDS = 1000000.0f / static_cast<float>(MAX_COLOR_KELVIN);
 static const float MAX_COLOR_MIREDS = 1000000.0f / static_cast<float>(MIN_COLOR_KELVIN);
-static const float EXPOSED_MIN_COLOR_MIREDS = 152.0f;
-static const float EXPOSED_MAX_COLOR_MIREDS = 371.0f;
+// Home Assistant's Kelvin<->mired rounding can overshoot the true device range slightly
+// (observed as low as 151.999 and as high as 371.058 mireds), so expose a bit more margin
+// than the previous 152.0/371.0 bounds to avoid spurious "out of range" warnings on every
+// min/max color-temperature request. Values are still clamped to the physical Kelvin range
+// before being written to the device.
+static const float EXPOSED_MIN_COLOR_MIREDS = 151.0f;
+static const float EXPOSED_MAX_COLOR_MIREDS = 372.0f;
 static const uint16_t MIN_PLAUSIBLE_COLOR_KELVIN = 1500;
 static const uint16_t MAX_PLAUSIBLE_COLOR_KELVIN = 9000;
 
