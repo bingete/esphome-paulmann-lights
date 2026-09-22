@@ -193,9 +193,9 @@ void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
     return;
   }
 
-  this->pending_color_temperature_write_ = false;
+  this->pending_color_mireds_ = this->color_mireds_;
   this->waiting_for_color_temperature_mode_ack_ = false;
-  this->write_color_temperature_payload_(this->color_mireds_);
+  this->pending_color_temperature_write_ = !this->write_color_temperature_payload_(this->pending_color_mireds_);
 }
 
 bool PaulmannLights::write_color_temperature_payload_(uint16_t color_mireds) {
