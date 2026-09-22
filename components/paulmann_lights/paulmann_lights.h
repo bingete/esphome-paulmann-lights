@@ -160,7 +160,6 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   static std::string bytes_to_hex_(const uint8_t *value, uint16_t value_len);
 
   bool pending_color_temperature_write_{false};
-  bool waiting_for_color_temperature_mode_ack_{false};
   bool pending_working_mode_write_{false};
   float pending_color_mireds_{370.0f};
   uint8_t pending_working_mode_value_{0};
