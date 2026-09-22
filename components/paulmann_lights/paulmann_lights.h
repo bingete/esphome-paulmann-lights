@@ -25,7 +25,7 @@ class PaulmannLightOutput : public light::LightOutput {
  public:
   void set_parent(PaulmannLights *parent) { this->parent_ = parent; }
   void setup_state(light::LightState *state) override;
-  void apply_remote_state(bool on, uint8_t brightness, uint16_t color_mireds);
+  void apply_remote_state(bool on, uint8_t brightness, float color_mireds);
 
   light::LightTraits get_traits() override;
   void write_state(light::LightState *state) override;
@@ -72,7 +72,7 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
 
   void write_onoff(bool on);
   void write_brightness(uint8_t brightness);
-  void write_color_temperature(uint16_t color_mireds);
+  void write_color_temperature(float color_mireds);
   void write_control(ControlType control_type, uint8_t value);
   void sync_system_time();
   void set_light_output(PaulmannLightOutput *light_output) { this->light_output_ = light_output; }
@@ -121,7 +121,7 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
 
   bool on_{false};
   uint8_t brightness_{100};
-  uint16_t color_mireds_{370};
+  float color_mireds_{370.0f};
   uint8_t working_mode_{0xFF};
   ColorByteOrder color_byte_order_{COLOR_BYTE_ORDER_UNKNOWN};
 
@@ -152,7 +152,8 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   void advance_read_queue_();
   void process_read_value_(uint16_t handle, const uint8_t *value, uint16_t value_len);
   void publish_light_state_();
-  bool write_color_temperature_payload_(uint16_t color_mireds);
+  static float clamp_color_mireds_(float color_mireds);
+  bool write_color_temperature_payload_(float color_mireds);
   void detect_color_byte_order_(uint16_t little_endian_kelvin, uint16_t big_endian_kelvin);
   static std::string bytes_to_string_(const uint8_t *value, uint16_t value_len);
   static std::string bytes_to_hex_(const uint8_t *value, uint16_t value_len);
@@ -160,7 +161,7 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   bool pending_color_temperature_write_{false};
   bool waiting_for_color_temperature_mode_ack_{false};
   bool pending_working_mode_write_{false};
-  uint16_t pending_color_mireds_{370};
+  float pending_color_mireds_{370.0f};
   uint8_t pending_working_mode_value_{0};
 };
 
