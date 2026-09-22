@@ -3,7 +3,7 @@ ESPHome custom component for controlling Paulmann Bluetooth LED lights with ESP3
 
 ## Features
 
-- Light control (on/off, brightness, color temperature)
+- Light control (on/off, brightness, color temperature, approximately 2700K-6500K)
 - Device controls (timer, working mode, controller enable)
 - BLE password authentication (`1234` default)
 - Automatic reconnect attempts with configurable retry count

@@ -37,6 +37,12 @@ static const uint16_t UUID_INFO_SOFTWARE_REVISION = 0x2A28;
 static const uint16_t UUID_INFO_MANUFACTURER = 0x2A29;
 static const uint16_t UUID_INFO_IEEE_CERT = 0x2A2A;
 static const uint16_t UUID_INFO_PNP_ID = 0x2A50;
+static const uint16_t MIN_COLOR_KELVIN = 2700;
+static const uint16_t MAX_COLOR_KELVIN = 6500;
+static const float MIN_COLOR_MIREDS = 1000000.0f / static_cast<float>(MAX_COLOR_KELVIN);
+static const float MAX_COLOR_MIREDS = 1000000.0f / static_cast<float>(MIN_COLOR_KELVIN);
+static const float EXPOSED_MIN_COLOR_MIREDS = 152.0f;
+static const float EXPOSED_MAX_COLOR_MIREDS = 371.0f;
 static const uint16_t MIN_PLAUSIBLE_COLOR_KELVIN = 1500;
 static const uint16_t MAX_PLAUSIBLE_COLOR_KELVIN = 9000;
 
@@ -56,7 +62,7 @@ void PaulmannLightOutput::setup_state(light::LightState *state) {
   this->light_state_ = state;
 }
 
-void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, uint16_t color_mireds) {
+void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, float color_mireds) {
   if (this->light_state_ == nullptr) {
     return;
   }
@@ -189,18 +195,24 @@ void PaulmannLights::write_brightness(uint8_t brightness) {
   }
 }
 
-void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
-  this->pending_color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
+float PaulmannLights::clamp_color_mireds_(float color_mireds) {
+  return std::max(MIN_COLOR_MIREDS, std::min(MAX_COLOR_MIREDS, color_mireds));
+}
+
+void PaulmannLights::write_color_temperature(float color_mireds) {
+  this->pending_color_mireds_ = clamp_color_mireds_(color_mireds);
   this->color_mireds_ = this->pending_color_mireds_;
   this->waiting_for_color_temperature_mode_ack_ = false;
   this->pending_working_mode_write_ = false;
   this->pending_color_temperature_write_ = !this->write_color_temperature_payload_(this->pending_color_mireds_);
 }
 
-bool PaulmannLights::write_color_temperature_payload_(uint16_t color_mireds) {
+bool PaulmannLights::write_color_temperature_payload_(float color_mireds) {
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
-  this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
-  const auto kelvin = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(this->color_mireds_)));
+  this->color_mireds_ = clamp_color_mireds_(color_mireds);
+  const auto kelvin = static_cast<uint16_t>(
+      std::max<int>(MIN_COLOR_KELVIN,
+                    std::min<int>(MAX_COLOR_KELVIN, std::lround(1000000.0f / this->color_mireds_))));
   const bool write_big_endian = this->color_byte_order_ == COLOR_BYTE_ORDER_BIG_ENDIAN;
   const uint8_t payload[2] = {
       write_big_endian ? static_cast<uint8_t>((kelvin >> 8) & 0xFF) : static_cast<uint8_t>(kelvin & 0xFF),
@@ -503,8 +515,8 @@ void PaulmannLights::process_read_value_(uint16_t handle, const uint8_t *value, 
     // The device reports its color temperature in Kelvin.
     const auto kelvin = this->color_byte_order_ == COLOR_BYTE_ORDER_BIG_ENDIAN ? big_endian_kelvin : little_endian_kelvin;
     if (kelvin > 0) {
-      const auto mireds = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(kelvin)));
-      this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, mireds));
+      const auto clamped_kelvin = std::max<uint16_t>(MIN_COLOR_KELVIN, std::min<uint16_t>(MAX_COLOR_KELVIN, kelvin));
+      this->color_mireds_ = clamp_color_mireds_(1000000.0f / static_cast<float>(clamped_kelvin));
     }
     this->publish_light_state_();
     return;
@@ -588,8 +600,8 @@ std::string PaulmannLights::bytes_to_hex_(const uint8_t *value, uint16_t value_l
 light::LightTraits PaulmannLightOutput::get_traits() {
   auto traits = light::LightTraits();
   traits.set_supported_color_modes({light::ColorMode::COLOR_TEMPERATURE});
-  traits.set_min_mireds(153.0f);
-  traits.set_max_mireds(370.0f);
+  traits.set_min_mireds(EXPOSED_MIN_COLOR_MIREDS);
+  traits.set_max_mireds(EXPOSED_MAX_COLOR_MIREDS);
   return traits;
 }
 
@@ -603,14 +615,14 @@ void PaulmannLightOutput::write_state(light::LightState *state) {
 
   bool on = false;
   float brightness = 1.0f;
-  float color_temperature = 370.0f;
+  float color_temperature = MAX_COLOR_MIREDS;
   state->current_values_as_binary(&on);
   state->current_values_as_brightness(&brightness);
   state->current_values_as_ct(&color_temperature, &brightness);
 
   this->parent_->write_onoff(on);
   this->parent_->write_brightness(static_cast<uint8_t>(roundf(brightness * 100.0f)));
-  this->parent_->write_color_temperature(static_cast<uint16_t>(roundf(color_temperature)));
+  this->parent_->write_color_temperature(color_temperature);
 }
 
 void PaulmannControlNumber::control(float value) {
