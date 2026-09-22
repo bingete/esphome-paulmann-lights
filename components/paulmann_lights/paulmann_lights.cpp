@@ -53,6 +53,9 @@ static const uint16_t MAX_PLAUSIBLE_COLOR_KELVIN = 9000;
 
 void PaulmannLights::setup() {
   esp32_ble_client::BLEClientBase::setup();
+  // Start the poll interval from boot so the first poll happens update_interval_ms_ after
+  // startup (and after the auth-triggered poll), not immediately at uptime zero.
+  this->last_poll_ms_ = millis();
   this->set_interval("poll", this->update_interval_ms_, [this]() { this->poll_state_(); });
 }
 
@@ -234,7 +237,14 @@ void PaulmannLights::ensure_color_temperature_mode_() {
 }
 
 bool PaulmannLights::write_color_temperature_payload_(float color_mireds) {
-  this->ensure_color_temperature_mode_();
+  if (this->handles_.working_mode != 0 && this->working_mode_ != WORKING_MODE_COLOR_TEMPERATURE) {
+    // Force the lamp into color-temperature mode first. If we had to switch modes, keep the
+    // color write pending so it is retried on the next poll/write slot, after the mode write
+    // has reached the lamp; writing the color characteristic in the same BLE transaction as
+    // the mode switch is silently ignored by the firmware.
+    this->ensure_color_temperature_mode_();
+    return false;
+  }
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
   this->color_mireds_ = clamp_color_mireds_(color_mireds);
   const auto kelvin = static_cast<uint16_t>(
