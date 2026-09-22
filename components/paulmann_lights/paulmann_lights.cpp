@@ -101,6 +101,7 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       ESP_LOGW(TAG, "[%s] BLE disconnected", this->address_str());
       this->authenticated_ = false;
       this->auth_write_pending_ = false;
+      this->working_mode_ = 0xFF;
       this->pending_color_temperature_write_ = false;
       this->waiting_for_color_temperature_mode_ack_ = false;
       this->pending_working_mode_write_ = false;
@@ -218,6 +219,7 @@ bool PaulmannLights::write_color_temperature_payload_(uint16_t color_mireds) {
       static_cast<uint8_t>((kelvin >> 8) & 0xFF),
   };
   if (!this->write_bytes_(this->handles_.color, payload, sizeof(payload))) {
+    this->working_mode_ = 0xFF;
     ESP_LOGW(TAG, "[%s] Failed to write color temperature", this->address_str());
     return false;
   }

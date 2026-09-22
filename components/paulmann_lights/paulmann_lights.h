@@ -116,7 +116,7 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   bool on_{false};
   uint8_t brightness_{100};
   uint16_t color_mireds_{370};
-  uint8_t working_mode_{0};
+  uint8_t working_mode_{0xFF};
 
   std::deque<uint16_t> pending_reads_;
   uint16_t current_read_handle_{0};
