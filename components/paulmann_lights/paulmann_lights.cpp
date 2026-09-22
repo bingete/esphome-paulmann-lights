@@ -142,6 +142,9 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
         if (param->write.status != ESP_GATT_OK) {
           ESP_LOGW(TAG, "[%s] Working mode write failed (status=%d)", this->address_str(), param->write.status);
           this->pending_working_mode_write_ = false;
+          // The cached mode may have been optimistically updated by ensure_color_temperature_mode_();
+          // reset it to unknown so the next color-temperature write retries the mode switch.
+          this->working_mode_ = 0xFF;
         } else {
           if (this->pending_working_mode_write_) {
             this->working_mode_ = this->pending_working_mode_value_;
@@ -207,7 +210,26 @@ void PaulmannLights::write_color_temperature(float color_mireds) {
   this->pending_color_temperature_write_ = !this->write_color_temperature_payload_(this->pending_color_mireds_);
 }
 
+void PaulmannLights::ensure_color_temperature_mode_() {
+  if (this->handles_.working_mode == 0 || this->working_mode_ == WORKING_MODE_COLOR_TEMPERATURE) {
+    return;
+  }
+  // The device silently ignores color-characteristic writes while it is in a non-CT working
+  // mode (e.g. after being toggled on in a different mode), so force it back into CT mode
+  // before every color payload write. This is fire-and-forget (no ack gating) so a slow or
+  // missing ack never blocks subsequent color updates the way earlier ack-gated attempts did.
+  const uint8_t mode = WORKING_MODE_COLOR_TEMPERATURE;
+  if (this->write_bytes_(this->handles_.working_mode, &mode, 1)) {
+    // Optimistically cache the new mode; if the write is ultimately NACKed, the write ack
+    // handler resets working_mode_ back to unknown so the next attempt retries the switch.
+    this->working_mode_ = mode;
+  } else {
+    ESP_LOGW(TAG, "[%s] Failed to switch to color-temperature working mode", this->address_str());
+  }
+}
+
 bool PaulmannLights::write_color_temperature_payload_(float color_mireds) {
+  this->ensure_color_temperature_mode_();
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
   this->color_mireds_ = clamp_color_mireds_(color_mireds);
   const auto kelvin = static_cast<uint16_t>(
