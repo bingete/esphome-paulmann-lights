@@ -103,6 +103,7 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       this->auth_write_pending_ = false;
       this->pending_color_temperature_write_ = false;
       this->waiting_for_color_temperature_mode_ack_ = false;
+      this->pending_working_mode_write_ = false;
       this->read_in_progress_ = false;
       this->pending_reads_.clear();
       this->current_read_handle_ = 0;
@@ -131,9 +132,17 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
         if (param->write.status != ESP_GATT_OK) {
           ESP_LOGW(TAG, "[%s] Working mode write failed (status=%d)", this->address_str(), param->write.status);
           this->pending_color_temperature_write_ = false;
-        } else if (handle_color_temperature_mode_ack && this->pending_color_temperature_write_) {
-          this->working_mode_ = WORKING_MODE_COLOR_TEMPERATURE;
-          this->pending_color_temperature_write_ = !this->write_color_temperature_payload_(this->pending_color_mireds_);
+          this->pending_working_mode_write_ = false;
+        } else {
+          if (this->pending_working_mode_write_) {
+            this->working_mode_ = this->pending_working_mode_value_;
+            this->pending_working_mode_write_ = false;
+          }
+          if (handle_color_temperature_mode_ack && this->pending_color_temperature_write_ &&
+              this->working_mode_ == WORKING_MODE_COLOR_TEMPERATURE) {
+            this->pending_color_temperature_write_ =
+                !this->write_color_temperature_payload_(this->pending_color_mireds_);
+          }
         }
       }
       break;
@@ -184,11 +193,14 @@ void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
     this->pending_color_temperature_write_ = true;
     this->pending_color_mireds_ = this->color_mireds_;
     this->waiting_for_color_temperature_mode_ack_ = true;
+    this->pending_working_mode_write_ = true;
+    this->pending_working_mode_value_ = WORKING_MODE_COLOR_TEMPERATURE;
     const uint8_t mode = WORKING_MODE_COLOR_TEMPERATURE;
     if (!this->write_bytes_(this->handles_.working_mode, &mode, 1)) {
       ESP_LOGW(TAG, "[%s] Failed to switch to color temperature mode", this->address_str());
       this->pending_color_temperature_write_ = false;
       this->waiting_for_color_temperature_mode_ack_ = false;
+      this->pending_working_mode_write_ = false;
     }
     return;
   }
@@ -234,7 +246,8 @@ void PaulmannLights::write_control(ControlType control_type, uint8_t value) {
   } else if (control_type == CONTROL_TYPE_WORKING_MODE) {
     this->pending_color_temperature_write_ = false;
     this->waiting_for_color_temperature_mode_ack_ = false;
-    this->working_mode_ = value;
+    this->pending_working_mode_write_ = true;
+    this->pending_working_mode_value_ = value;
   }
 }
 

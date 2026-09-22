@@ -151,7 +151,9 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
 
   bool pending_color_temperature_write_{false};
   bool waiting_for_color_temperature_mode_ack_{false};
+  bool pending_working_mode_write_{false};
   uint16_t pending_color_mireds_{370};
+  uint8_t pending_working_mode_value_{0};
 };
 
 }  // namespace esphome::paulmann_lights
