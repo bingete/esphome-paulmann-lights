@@ -145,8 +145,12 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   void advance_read_queue_();
   void process_read_value_(uint16_t handle, const uint8_t *value, uint16_t value_len);
   void publish_light_state_();
+  bool write_color_temperature_payload_(uint16_t color_mireds);
   static std::string bytes_to_string_(const uint8_t *value, uint16_t value_len);
   static std::string bytes_to_hex_(const uint8_t *value, uint16_t value_len);
+
+  bool pending_color_temperature_write_{false};
+  uint16_t pending_color_mireds_{370};
 };
 
 }  // namespace esphome::paulmann_lights

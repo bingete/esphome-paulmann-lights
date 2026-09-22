@@ -101,6 +101,7 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       ESP_LOGW(TAG, "[%s] BLE disconnected", this->address_str());
       this->authenticated_ = false;
       this->auth_write_pending_ = false;
+      this->pending_color_temperature_write_ = false;
       this->read_in_progress_ = false;
       this->pending_reads_.clear();
       this->current_read_handle_ = 0;
@@ -122,6 +123,14 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
           this->poll_state_();
         } else {
           ESP_LOGW(TAG, "[%s] Authentication failed (status=%d)", this->address_str(), param->write.status);
+        }
+      } else if (param->write.handle == this->handles_.working_mode) {
+        if (param->write.status != ESP_GATT_OK) {
+          ESP_LOGW(TAG, "[%s] Working mode write failed (status=%d)", this->address_str(), param->write.status);
+          this->pending_color_temperature_write_ = false;
+        } else if (this->pending_color_temperature_write_) {
+          this->working_mode_ = WORKING_MODE_COLOR_TEMPERATURE;
+          this->pending_color_temperature_write_ = !this->write_color_temperature_payload_(this->pending_color_mireds_);
         }
       }
       break;
@@ -169,15 +178,23 @@ void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
   this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
 
   if (this->handles_.working_mode != 0 && this->working_mode_ != WORKING_MODE_COLOR_TEMPERATURE) {
+    this->pending_color_temperature_write_ = true;
+    this->pending_color_mireds_ = this->color_mireds_;
     const uint8_t mode = WORKING_MODE_COLOR_TEMPERATURE;
     if (!this->write_bytes_(this->handles_.working_mode, &mode, 1)) {
       ESP_LOGW(TAG, "[%s] Failed to switch to color temperature mode", this->address_str());
-    } else {
-      this->working_mode_ = mode;
+      this->pending_color_temperature_write_ = false;
     }
+    return;
   }
 
+  this->pending_color_temperature_write_ = false;
+  this->write_color_temperature_payload_(this->color_mireds_);
+}
+
+bool PaulmannLights::write_color_temperature_payload_(uint16_t color_mireds) {
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
+  this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
   const auto kelvin = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(this->color_mireds_)));
   const uint8_t payload[2] = {
       static_cast<uint8_t>(kelvin & 0xFF),
@@ -185,7 +202,9 @@ void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
   };
   if (!this->write_bytes_(this->handles_.color, payload, sizeof(payload))) {
     ESP_LOGW(TAG, "[%s] Failed to write color temperature", this->address_str());
+    return false;
   }
+  return true;
 }
 
 void PaulmannLights::write_control(ControlType control_type, uint8_t value) {
