@@ -403,9 +403,7 @@ void PaulmannLights::poll_state_() {
   this->last_poll_ms_ = now;
   if (this->pending_color_temperature_write_ && !this->waiting_for_color_temperature_mode_ack_) {
     this->write_color_temperature(this->pending_color_mireds_);
-    if (this->pending_color_temperature_write_ || this->waiting_for_color_temperature_mode_ack_) {
-      return;
-    }
+    return;
   }
   this->begin_poll_reads_();
 }
