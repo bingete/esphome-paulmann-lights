@@ -37,6 +37,8 @@ static const uint16_t UUID_INFO_SOFTWARE_REVISION = 0x2A28;
 static const uint16_t UUID_INFO_MANUFACTURER = 0x2A29;
 static const uint16_t UUID_INFO_IEEE_CERT = 0x2A2A;
 static const uint16_t UUID_INFO_PNP_ID = 0x2A50;
+static const uint16_t MIN_PLAUSIBLE_COLOR_KELVIN = 1500;
+static const uint16_t MAX_PLAUSIBLE_COLOR_KELVIN = 9000;
 
 void PaulmannLights::setup() {
   esp32_ble_client::BLEClientBase::setup();
@@ -102,6 +104,7 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       this->authenticated_ = false;
       this->auth_write_pending_ = false;
       this->working_mode_ = 0xFF;
+      this->color_byte_order_ = COLOR_BYTE_ORDER_UNKNOWN;
       this->pending_color_temperature_write_ = false;
       this->waiting_for_color_temperature_mode_ack_ = false;
       this->pending_working_mode_write_ = false;
@@ -198,9 +201,10 @@ bool PaulmannLights::write_color_temperature_payload_(uint16_t color_mireds) {
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
   this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
   const auto kelvin = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(this->color_mireds_)));
+  const bool write_big_endian = this->color_byte_order_ == COLOR_BYTE_ORDER_BIG_ENDIAN;
   const uint8_t payload[2] = {
-      static_cast<uint8_t>(kelvin & 0xFF),
-      static_cast<uint8_t>((kelvin >> 8) & 0xFF),
+      write_big_endian ? static_cast<uint8_t>((kelvin >> 8) & 0xFF) : static_cast<uint8_t>(kelvin & 0xFF),
+      write_big_endian ? static_cast<uint8_t>(kelvin & 0xFF) : static_cast<uint8_t>((kelvin >> 8) & 0xFF),
   };
   if (!this->write_bytes_(this->handles_.color, payload, sizeof(payload))) {
     this->working_mode_ = 0xFF;
@@ -208,6 +212,17 @@ bool PaulmannLights::write_color_temperature_payload_(uint16_t color_mireds) {
     return false;
   }
   return true;
+}
+
+void PaulmannLights::detect_color_byte_order_(uint16_t little_endian_kelvin, uint16_t big_endian_kelvin) {
+  const bool little_plausible =
+      little_endian_kelvin >= MIN_PLAUSIBLE_COLOR_KELVIN && little_endian_kelvin <= MAX_PLAUSIBLE_COLOR_KELVIN;
+  const bool big_plausible =
+      big_endian_kelvin >= MIN_PLAUSIBLE_COLOR_KELVIN && big_endian_kelvin <= MAX_PLAUSIBLE_COLOR_KELVIN;
+  if (little_plausible == big_plausible) {
+    return;
+  }
+  this->color_byte_order_ = little_plausible ? COLOR_BYTE_ORDER_LITTLE_ENDIAN : COLOR_BYTE_ORDER_BIG_ENDIAN;
 }
 
 void PaulmannLights::write_control(ControlType control_type, uint8_t value) {
@@ -482,8 +497,11 @@ void PaulmannLights::process_read_value_(uint16_t handle, const uint8_t *value, 
   }
 
   if (handle == this->handles_.color && value_len >= 2) {
-    // The device reports its color temperature in Kelvin, not mireds.
-    const auto kelvin = static_cast<uint16_t>(value[0] | (value[1] << 8));
+    const auto little_endian_kelvin = static_cast<uint16_t>(value[0] | (value[1] << 8));
+    const auto big_endian_kelvin = static_cast<uint16_t>(value[1] | (value[0] << 8));
+    this->detect_color_byte_order_(little_endian_kelvin, big_endian_kelvin);
+    // The device reports its color temperature in Kelvin.
+    const auto kelvin = this->color_byte_order_ == COLOR_BYTE_ORDER_BIG_ENDIAN ? big_endian_kelvin : little_endian_kelvin;
     if (kelvin > 0) {
       const auto mireds = static_cast<uint16_t>(std::lround(1000000.0f / static_cast<float>(kelvin)));
       this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, mireds));
