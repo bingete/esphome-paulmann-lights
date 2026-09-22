@@ -189,7 +189,7 @@ void PaulmannLights::write_brightness(uint8_t brightness) {
 void PaulmannLights::write_color_temperature(uint16_t color_mireds) {
   this->color_mireds_ = std::max<uint16_t>(153, std::min<uint16_t>(370, color_mireds));
 
-  if (this->handles_.working_mode != 0 && this->working_mode_ != WORKING_MODE_COLOR_TEMPERATURE) {
+  if (this->handles_.working_mode != 0) {
     this->pending_color_temperature_write_ = true;
     this->pending_color_mireds_ = this->color_mireds_;
     this->waiting_for_color_temperature_mode_ack_ = true;
