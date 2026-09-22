@@ -124,7 +124,9 @@ bool PaulmannLights::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       this->auth_write_pending_ = false;
       this->working_mode_ = 0xFF;
       this->color_byte_order_ = COLOR_BYTE_ORDER_UNKNOWN;
-      this->pending_color_temperature_write_ = false;
+      // Keep pending_color_temperature_write_ set across disconnects: the lamp never got a
+      // chance to confirm it, and dropping it here let a stale/cold value read back after
+      // reconnecting silently overwrite the user's requested color permanently.
       this->pending_working_mode_write_ = false;
       this->read_in_progress_ = false;
       this->pending_reads_.clear();
@@ -400,9 +402,16 @@ void PaulmannLights::authenticate_() {
 void PaulmannLights::poll_state_() {
   if (!this->connected()) {
     const uint32_t now = millis();
-    if (this->connection_attempts_ < this->connection_retries_ && now - this->last_connect_attempt_ms_ > 5000) {
+    if (now - this->last_connect_attempt_ms_ > 5000) {
       this->last_connect_attempt_ms_ = now;
-      this->connection_attempts_++;
+      if (this->connection_attempts_ < this->connection_retries_) {
+        this->connection_attempts_++;
+      } else {
+        // connection_retries_ only paces the warning log; reconnection itself must never give
+        // up permanently, or a run of transient BLE failures (very common with these lamps)
+        // strands the light disconnected until the ESP is rebooted.
+        this->connection_attempts_ = 1;
+      }
       ESP_LOGW(TAG, "[%s] Reconnecting attempt %u/%u", this->address_str(), this->connection_attempts_,
                this->connection_retries_);
       this->connect();
