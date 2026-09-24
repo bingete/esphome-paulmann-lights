@@ -214,6 +214,13 @@ void PaulmannLights::write_color_temperature(float color_mireds) {
   this->write_color_temperature_payload_(this->pending_color_mireds_);
 }
 
+bool PaulmannLights::should_write_color_temperature(float color_mireds) const {
+  const float clamped = clamp_color_mireds_(color_mireds);
+  const float current_target =
+      this->pending_color_temperature_write_ ? this->pending_color_mireds_ : this->color_mireds_;
+  return std::fabs(clamped - current_target) > COLOR_CONFIRM_MIREDS_TOLERANCE;
+}
+
 bool PaulmannLights::write_color_temperature_payload_(float color_mireds) {
   // Earlier revisions forced the working-mode characteristic to 0x00 ("color temperature")
   // before every color write, on the unverified assumption that the lamp ignores color writes
@@ -629,7 +636,9 @@ void PaulmannLightOutput::write_state(light::LightState *state) {
 
   this->parent_->write_onoff(on);
   this->parent_->write_brightness(static_cast<uint8_t>(roundf(brightness * 100.0f)));
-  this->parent_->write_color_temperature(color_temperature);
+  if (this->parent_->should_write_color_temperature(color_temperature)) {
+    this->parent_->write_color_temperature(color_temperature);
+  }
 }
 
 void PaulmannControlNumber::control(float value) {
