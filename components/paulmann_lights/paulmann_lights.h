@@ -72,6 +72,7 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   void write_onoff(bool on);
   void write_brightness(uint8_t brightness);
   void write_color_temperature(float color_mireds);
+  bool should_write_color_temperature(float color_mireds) const;
   void write_control(ControlType control_type, uint8_t value);
   void sync_system_time();
   void set_light_output(PaulmannLightOutput *light_output) { this->light_output_ = light_output; }
