@@ -10,6 +10,11 @@ ESPHome custom component for controlling Paulmann Bluetooth LED lights with ESP3
 - System time synchronization write support
 - Device info text sensors (system id, model, serial, firmware/hardware/software revision, manufacturer, IEEE cert, PnP ID)
 
+On/off and brightness commands leave the lamp's color temperature unchanged. The
+initial ESPHome color value after a restart or firmware update is not sent to the
+lamp. Polled lamp values update the displayed color; a changed ESPHome color target
+is sent directly to the lamp, independently of brightness transitions.
+
 ## ESPHome component structure
 
 - `custom_components/paulmann_lights/__init__.py`

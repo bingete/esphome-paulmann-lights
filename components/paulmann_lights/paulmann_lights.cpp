@@ -88,6 +88,8 @@ void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, float 
   values.set_state(on);
   values.set_brightness(static_cast<float>(brightness) / 100.0f);
   values.set_color_temperature(color_mireds);
+  this->last_color_target_ = values.get_color_temperature();
+  this->color_target_initialized_ = true;
   this->light_state_->publish_state();
 }
 
@@ -629,16 +631,18 @@ void PaulmannLightOutput::write_state(light::LightState *state) {
 
   bool on = false;
   float brightness = 1.0f;
-  float color_temperature = MAX_COLOR_MIREDS;
   state->current_values_as_binary(&on);
   state->current_values_as_brightness(&brightness);
-  state->current_values_as_ct(&color_temperature, &brightness);
 
   this->parent_->write_onoff(on);
   this->parent_->write_brightness(static_cast<uint8_t>(roundf(brightness * 100.0f)));
-  if (this->parent_->should_write_color_temperature(color_temperature)) {
-    this->parent_->write_color_temperature(color_temperature);
+  const float color_target = state->remote_values.get_color_temperature();
+  if (this->color_target_initialized_ && std::fabs(color_target - this->last_color_target_) > 0.01f &&
+      this->parent_->should_write_color_temperature(color_target)) {
+    this->parent_->write_color_temperature(color_target);
   }
+  this->last_color_target_ = color_target;
+  this->color_target_initialized_ = true;
 }
 
 void PaulmannControlNumber::control(float value) {

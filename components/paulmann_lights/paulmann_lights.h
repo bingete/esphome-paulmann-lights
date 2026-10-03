@@ -33,6 +33,8 @@ class PaulmannLightOutput : public light::LightOutput {
  protected:
   PaulmannLights *parent_{nullptr};
   light::LightState *light_state_{nullptr};
+  bool color_target_initialized_{false};
+  float last_color_target_{0.0f};
 };
 
 class PaulmannControlNumber : public number::Number {
