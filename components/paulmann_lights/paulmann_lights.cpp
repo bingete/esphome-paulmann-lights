@@ -1,6 +1,5 @@
 #include "paulmann_lights.h"
 
-#include "esphome/core/application.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
@@ -78,11 +77,8 @@ void PaulmannLightOutput::apply_remote_state(bool on, uint8_t brightness, float 
     return;
   }
 
-  // Mirror the polled device state into remote_values directly instead of going through
-  // make_call().perform(). A LightCall with transition_length(0) ends in set_immediately_(),
-  // which defers write_state() to the next loop() iteration -- after suppress_write_ has
-  // already been cleared. That phantom write pushed the lamp's old values right back,
-  // clobbering the user's pending color-temperature target so the change never landed.
+  // Publish polled values directly: a LightCall schedules write_state() and can
+  // send stale values back to the lamp instead of only updating its reported state.
   auto &values = this->light_state_->remote_values;
   values.set_color_mode(light::ColorMode::COLOR_TEMPERATURE);
   values.set_state(on);
@@ -224,12 +220,7 @@ bool PaulmannLights::should_write_color_temperature(float color_mireds) const {
 }
 
 bool PaulmannLights::write_color_temperature_payload_(float color_mireds) {
-  // Earlier revisions forced the working-mode characteristic to 0x00 ("color temperature")
-  // before every color write, on the unverified assumption that the lamp ignores color writes
-  // outside that mode. That assumption was never confirmed against real hardware and instead
-  // caused the lamp to flip into whatever mode 0x00 actually is, resetting it to cold and
-  // rejecting further color writes. Write the color characteristic directly; the working-mode
-  // characteristic is left alone unless the user explicitly changes it via its own control.
+  // Write color directly; working mode is changed only by its explicit control.
   // The device's BLE color characteristic expects the color temperature in Kelvin, not mireds.
   this->color_mireds_ = clamp_color_mireds_(color_mireds);
   const auto kelvin = static_cast<uint16_t>(

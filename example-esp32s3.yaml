@@ -8,10 +8,14 @@ esp32:
     type: esp-idf
 
 logger:
+  level: VERBOSE
 
 api:
+  encryption:
+    key: !secret paulmann_esp32s3__encryption_key
 
 ota:
+  - platform: esphome
 
 wifi:
   ssid: !secret wifi_ssid
@@ -21,14 +25,17 @@ esp32_ble_tracker:
 
 external_components:
   - source:
-      type: local
-      path: ./custom_components
+      type: git
+      url: https://github.com/bingete/esphome-paulmann-lights
+      ref: main
+    refresh: 0s
+    components: [paulmann_lights]
 
 paulmann_lights:
   - id: bedroom_paulmann
     name: "Bedroom Paulmann"
     mac_address: "AA:BB:CC:DD:EE:FF"
-    password: "1234"
+    password: !secret paulmann_password
     connection_retries: 5
     update_interval: 30s
 

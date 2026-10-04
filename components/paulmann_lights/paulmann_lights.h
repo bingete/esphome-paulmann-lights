@@ -9,7 +9,6 @@
 #ifdef USE_ESP32
 
 #include <deque>
-#include <map>
 
 namespace esphome::paulmann_lights {
 
@@ -83,13 +82,13 @@ class PaulmannLights : public esp32_ble_client::BLEClientBase {
   void set_controller_enable_number(PaulmannControlNumber *number) { this->controller_enable_number_ = number; }
 
  protected:
- enum ColorByteOrder : uint8_t {
-   COLOR_BYTE_ORDER_UNKNOWN = 0,
-   COLOR_BYTE_ORDER_LITTLE_ENDIAN = 1,
-   COLOR_BYTE_ORDER_BIG_ENDIAN = 2,
- };
+  enum ColorByteOrder : uint8_t {
+    COLOR_BYTE_ORDER_UNKNOWN = 0,
+    COLOR_BYTE_ORDER_LITTLE_ENDIAN = 1,
+    COLOR_BYTE_ORDER_BIG_ENDIAN = 2,
+  };
 
- struct Handles {
+  struct Handles {
     uint16_t onoff{0};
     uint16_t brightness{0};
     uint16_t color{0};
